@@ -1,0 +1,6 @@
+{
+  "name": "SignageStudio TV",
+  "description": "Sistem TV Signage Digital Pintar dengan pemantau CCTV, siaran TV langsung, dan penjadwal promosi retail berbasis web real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
