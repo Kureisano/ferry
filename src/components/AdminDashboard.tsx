@@ -6,7 +6,8 @@ import {
   Tv, Shield, Calendar, Sliders, Play, Plus, Trash2, Edit, ExternalLink, Sparkles, 
   Clock, RefreshCw, Volume2, LayoutGrid, Check, AlertCircle, Sun, Info, HeartPulse, 
   HelpCircle, Eye, MonitorPlay, CheckCircle2, ChevronRight, Minimize2, Maximize2, Loader2,
-  LogOut, Monitor, Copy, Users, UserPlus, Key, UserCheck, Upload, FileCode, Search, FileUp, Globe
+  LogOut, Monitor, Copy, Users, UserPlus, Key, UserCheck, Upload, FileCode, Search, FileUp, Globe,
+  Server, Cpu, Network
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -506,6 +507,18 @@ export default function AdminDashboard({
     }
   }, [dvbScanLogs.length, isDvbScanning]);
 
+  // Tvheadend Integration States
+  const [showTvheadend, setShowTvheadend] = useState(false);
+  const [tvheadendHost, setTvheadendHost] = useState('http://192.168.1.100:9981');
+  const [tvheadendUser, setTvheadendUser] = useState('');
+  const [tvheadendPass, setTvheadendPass] = useState('');
+  const [tvheadendStatus, setTvheadendStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [tvheadendError, setTvheadendError] = useState('');
+  const [tvheadendChannels, setTvheadendChannels] = useState<TVChannel[]>([]);
+  const [selectedTvheadendIndexes, setSelectedTvheadendIndexes] = useState<number[]>([]);
+  const [isSimulatingTvheadend, setIsSimulatingTvheadend] = useState(false);
+  const [tvhSearch, setTvhSearch] = useState('');
+
   // Form states for CCTV Cameras CRUD
   const [showCCTVForm, setShowCCTVForm] = useState(false);
   const [editingCCTVId, setEditingCCTVId] = useState<string | null>(null);
@@ -702,6 +715,124 @@ export default function AdminDashboard({
     setDvbFoundChannels([]);
     setSelectedDvbIds([]);
     setDvbScanProgress(0);
+  };
+
+  // Tvheadend Handler Functions
+  const handleConnectTvheadend = async (useSimulator: boolean = false) => {
+    setTvheadendError('');
+    setTvheadendStatus('connecting');
+    setTvheadendChannels([]);
+    setSelectedTvheadendIndexes([]);
+
+    if (useSimulator) {
+      setIsSimulatingTvheadend(true);
+      setTimeout(() => {
+        setTvheadendStatus('connected');
+        const mockTvheadendChannels: TVChannel[] = [
+          {
+            id: 'tvh_rcti',
+            name: 'RCTI HD (Tvheadend DVB-T2)',
+            category: 'Entertainment',
+            videoUrl: `${tvheadendHost}/stream/channel/rcti_hd`,
+            isSimulated: false,
+            overlayText: 'RCTI HD: Streaming Live via Tvheadend Server DVB-T2'
+          },
+          {
+            id: 'tvh_sctv',
+            name: 'SCTV HD (Tvheadend DVB-T2)',
+            category: 'Entertainment',
+            videoUrl: `${tvheadendHost}/stream/channel/sctv_hd`,
+            isSimulated: false,
+            overlayText: 'SCTV HD: Streaming Live via Tvheadend Server DVB-T2'
+          },
+          {
+            id: 'tvh_transtv',
+            name: 'Trans TV HD (Tvheadend DVB-T2)',
+            category: 'Entertainment',
+            videoUrl: `${tvheadendHost}/stream/channel/trans_tv_hd`,
+            isSimulated: false,
+            overlayText: 'TRANS TV HD: Streaming Live via Tvheadend Server DVB-T2'
+          },
+          {
+            id: 'tvh_tvone',
+            name: 'tvOne HD (Tvheadend DVB-T2)',
+            category: 'News',
+            videoUrl: `${tvheadendHost}/stream/channel/tvone_hd`,
+            isSimulated: false,
+            overlayText: 'tvOne HD: Streaming Live via Tvheadend Server DVB-T2'
+          },
+          {
+            id: 'tvh_metro',
+            name: 'Metro TV HD (Tvheadend DVB-T2)',
+            category: 'News',
+            videoUrl: `${tvheadendHost}/stream/channel/metro_tv_hd`,
+            isSimulated: false,
+            overlayText: 'METRO TV: Streaming Live via Tvheadend Server DVB-T2'
+          },
+          {
+            id: 'tvh_tvri',
+            name: 'TVRI Nasional HD (Tvheadend DVB-T2)',
+            category: 'News',
+            videoUrl: `${tvheadendHost}/stream/channel/tvri_nas_hd`,
+            isSimulated: false,
+            overlayText: 'TVRI Nasional: Streaming Live via Tvheadend Server DVB-T2'
+          }
+        ];
+        setTvheadendChannels(mockTvheadendChannels);
+        setSelectedTvheadendIndexes(mockTvheadendChannels.map((_, i) => i));
+      }, 1000);
+      return;
+    }
+
+    setIsSimulatingTvheadend(false);
+    try {
+      const authHeader = tvheadendUser && tvheadendPass 
+        ? 'Basic ' + btoa(`${tvheadendUser}:${tvheadendPass}`)
+        : undefined;
+
+      // Fetch the raw M3U playlist from Tvheadend
+      const playlistUrl = `${tvheadendHost}/playlist/channels`;
+      const response = await fetch(playlistUrl, {
+        headers: authHeader ? { 'Authorization': authHeader } : {}
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+      }
+
+      const m3uText = await response.text();
+      const parsed = parseM3U(m3uText);
+      if (parsed.length === 0) {
+        throw new Error("Koneksi berhasil tetapi tidak ditemukan channel siaran DVB-T2 aktif di Tvheadend. Pastikan Anda telah menscan MUX di Tvheadend WebUI.");
+      }
+
+      // Convert URLs to include credentials if configured
+      const updatedWithAuth = parsed.map(c => {
+        if (tvheadendUser && tvheadendPass) {
+          try {
+            const urlObj = new URL(c.videoUrl);
+            urlObj.username = tvheadendUser;
+            urlObj.password = tvheadendPass;
+            return { ...c, videoUrl: urlObj.toString() };
+          } catch {
+            return c;
+          }
+        }
+        return c;
+      });
+
+      setTvheadendChannels(updatedWithAuth);
+      setSelectedTvheadendIndexes(updatedWithAuth.map((_, i) => i));
+      setTvheadendStatus('connected');
+    } catch (err: any) {
+      console.error(err);
+      setTvheadendStatus('error');
+      setTvheadendError(
+        `Gagal terhubung ke Tvheadend (${err.message}). ` +
+        `Ini wajar terjadi karena aturan CORS browser memblokir permintaan langsung dari aplikasi web cloud ke IP lokal/LAN Anda (${tvheadendHost}). ` +
+        `Silakan gunakan "Gunakan Mode Simulator / Demo" untuk memasukkan data dummy, atau import via M3U playlist manual.`
+      );
+    }
   };
 
   // TV Channel Handlers
@@ -2399,8 +2530,21 @@ export default function AdminDashboard({
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Konfigurasi Siaran TV & IPTV</h3>
                     <p className="text-slate-400 text-xs mt-1">Atur sumber siaran berita, video dekorasi, atau saluran streaming IPTV live.</p>
                   </div>
-                  {!showTVForm && !showM3UImport && !showDVBT2Scanner && (
+                  {!showTVForm && !showM3UImport && !showDVBT2Scanner && !showTvheadend && (
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setShowTvheadend(true);
+                          setTvheadendStatus('disconnected');
+                          setTvheadendError('');
+                          setTvheadendChannels([]);
+                        }}
+                        className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-teal-500/30 text-teal-400 hover:text-teal-300 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer animate-pulse"
+                      >
+                        <Server className="w-4 h-4 text-teal-500" />
+                        <span>Integrasi Tvheadend</span>
+                      </button>
+
                       <button
                         onClick={() => {
                           setShowDVBT2Scanner(true);
@@ -2414,7 +2558,7 @@ export default function AdminDashboard({
                         }}
                         className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-amber-500/30 text-amber-400 hover:text-amber-300 text-xs font-semibold rounded-xl transition-all shadow-md cursor-pointer"
                       >
-                        <Tv className="w-4 h-4 text-amber-500 animate-pulse" />
+                        <Tv className="w-4 h-4 text-amber-500" />
                         <span>Scan TV DVB-T2</span>
                       </button>
 
@@ -3103,6 +3247,341 @@ export default function AdminDashboard({
                             </div>
                           )}
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {showTvheadend && (
+                  <div className="bg-slate-900/20 border border-teal-500/10 rounded-2xl p-6 space-y-6">
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-850">
+                      <div className="flex items-center space-x-2">
+                        <Server className="w-5 h-5 text-teal-400" />
+                        <div>
+                          <h4 className="text-sm font-bold text-white uppercase tracking-wider">Integrasi Server Tvheadend / Astra Cesbo</h4>
+                          <p className="text-slate-400 text-[11px]">Koneksikan ke server streaming DVB-T2 lokal Anda untuk menarik data siaran TV</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowTvheadend(false);
+                          setTvheadendStatus('disconnected');
+                          setTvheadendChannels([]);
+                        }}
+                        className="text-slate-400 hover:text-slate-200 transition-colors cursor-pointer text-xs font-semibold px-3 py-1.5 bg-slate-950 border border-slate-850 rounded-lg hover:border-slate-750"
+                      >
+                        Tutup Integrasi
+                      </button>
+                    </div>
+
+                    {/* INTERACTIVE NETWORK TOPOLOGY / DIAGRAM */}
+                    <div className="bg-slate-950 border border-slate-850/80 rounded-2xl p-4.5 space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Network className="w-4 h-4 text-teal-400" />
+                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">🔌 Diagram Arsitektur & Alur Kerja</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                        {/* Node 1 */}
+                        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-xl text-center space-y-2 relative">
+                          <div className="inline-flex p-2 bg-amber-500/10 text-amber-400 rounded-lg">
+                            <Tv className="w-5 h-5 animate-bounce" style={{ animationDuration: '3s' }} />
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-bold text-slate-300">1. Antena UHF Terestrial</div>
+                            <div className="text-[9px] text-slate-500 leading-tight mt-1">Menangkap sinyal digital MUX (DVB-T2) regional gratis.</div>
+                          </div>
+                          <div className="hidden md:block absolute top-1/2 -right-2 transform -translate-y-1/2 text-teal-500 font-bold">➔</div>
+                        </div>
+
+                        {/* Node 2 */}
+                        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-xl text-center space-y-2 relative">
+                          <div className="inline-flex p-2 bg-cyan-500/10 text-cyan-400 rounded-lg">
+                            <Cpu className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-bold text-slate-300">2. USB DVB-T2 Tuner / PC</div>
+                            <div className="text-[9px] text-slate-500 leading-tight mt-1">Tuner dipasang di PC Linux / Raspberry Pi untuk dekoding RF.</div>
+                          </div>
+                          <div className="hidden md:block absolute top-1/2 -right-2 transform -translate-y-1/2 text-teal-500 font-bold">➔</div>
+                        </div>
+
+                        {/* Node 3 */}
+                        <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-xl text-center space-y-2 relative">
+                          <div className="inline-flex p-2 bg-teal-500/10 text-teal-400 rounded-lg">
+                            <Server className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-bold text-slate-300">3. Tvheadend / Astra Cesbo</div>
+                            <div className="text-[9px] text-slate-500 leading-tight mt-1">Mengemas stream siaran TV menjadi M3U / HTTP IPTV server lokal.</div>
+                          </div>
+                          <div className="hidden md:block absolute top-1/2 -right-2 transform -translate-y-1/2 text-teal-500 font-bold">➔</div>
+                        </div>
+
+                        {/* Node 4 */}
+                        <div className="bg-gradient-to-br from-indigo-950/40 to-slate-900/50 border border-indigo-500/20 p-3 rounded-xl text-center space-y-2">
+                          <div className="inline-flex p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
+                            <MonitorPlay className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-mono font-bold text-indigo-300">4. SignageStudioTV (Client)</div>
+                            <div className="text-[9px] text-slate-400 leading-tight mt-1">Aplikasi Anda memutar link stream TV secara realtime pada layar TV.</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Left Column: Connection Form (5 cols) */}
+                      <div className="lg:col-span-5 space-y-4">
+                        <div className="bg-slate-950 border border-slate-850 rounded-xl p-4.5 space-y-4 text-left">
+                          <h5 className="text-[10px] font-mono text-slate-400 uppercase tracking-widest font-bold">⚙️ Parameter Server Tvheadend</h5>
+                          
+                          {/* Host URL Input */}
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] text-slate-500 font-semibold uppercase">Alamat IP & Port Server (WebUI / M3U)</label>
+                            <input
+                              type="text"
+                              value={tvheadendHost}
+                              onChange={(e) => setTvheadendHost(e.target.value)}
+                              placeholder="Contoh: http://192.168.1.100:9981"
+                              className="w-full bg-slate-905 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                            />
+                            <p className="text-[9px] text-slate-600">Default port Tvheadend adalah 9981, sedangkan Astra Cesbo biasanya port 8000.</p>
+                          </div>
+
+                          {/* Username Input */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] text-slate-500 font-semibold uppercase">Username (Opsional)</label>
+                              <input
+                                type="text"
+                                value={tvheadendUser}
+                                onChange={(e) => setTvheadendUser(e.target.value)}
+                                placeholder="admin"
+                                className="w-full bg-slate-905 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Password Input */}
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] text-slate-500 font-semibold uppercase">Password (Opsional)</label>
+                              <input
+                                type="password"
+                                value={tvheadendPass}
+                                onChange={(e) => setTvheadendPass(e.target.value)}
+                                placeholder="••••••••"
+                                className="w-full bg-slate-905 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Warning / Notes on Local IPs and CORS */}
+                          <div className="p-3 bg-teal-950/20 border border-teal-500/10 rounded-lg text-[10px] text-teal-400 space-y-1 leading-relaxed">
+                            <div className="font-bold uppercase tracking-wide flex items-center gap-1">
+                              <Info className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
+                              <span>Catatan Penting CORS Browser</span>
+                            </div>
+                            <p>
+                              Aplikasi cloud yang di-host di internet tidak diizinkan oleh browser untuk mengakses IP lokal / private (LAN) Anda secara langsung akibat kebijakan CORS. 
+                            </p>
+                            <p className="font-semibold text-slate-300">
+                              Solusi: Gunakan tombol "Gunakan Mode Simulator / Demo" untuk memasukkan saluran yang dipetakan secara lokal, atau impor M3U Anda secara manual dengan men-download daftar saluran terlebih dahulu dari Tvheadend.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Connection actions */}
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleConnectTvheadend(false)}
+                            disabled={tvheadendStatus === 'connecting'}
+                            className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 border border-teal-500/40 text-teal-400 hover:text-teal-300 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-2"
+                          >
+                            {tvheadendStatus === 'connecting' && !isSimulatingTvheadend ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-teal-400 mr-1" />
+                            ) : (
+                              <Network className="w-4 h-4 text-teal-400" />
+                            )}
+                            <span>Hubungkan via Jaringan LAN</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleConnectTvheadend(true)}
+                            disabled={tvheadendStatus === 'connecting'}
+                            className="w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center space-x-2"
+                          >
+                            {tvheadendStatus === 'connecting' && isSimulatingTvheadend ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-white mr-1" />
+                            ) : (
+                              <Sparkles className="w-4 h-4 text-white animate-pulse" />
+                            )}
+                            <span>Gunakan Mode Simulator / Demo</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Right Column: Console / Channels List (7 cols) */}
+                      <div className="lg:col-span-7 flex flex-col space-y-4">
+                        {/* Status Message / Error Area */}
+                        {tvheadendStatus === 'error' && (
+                          <div className="p-4 bg-red-950/20 border border-red-500/30 rounded-xl text-left space-y-1.5">
+                            <div className="text-xs font-bold text-red-400 flex items-center gap-1.5">
+                              <AlertCircle className="w-4 h-4" />
+                              <span>KESALAHAN KONEKSI JARINGAN / CORS</span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-relaxed font-light">
+                              {tvheadendError}
+                            </p>
+                          </div>
+                        )}
+
+                        {tvheadendStatus === 'disconnected' && (
+                          <div className="flex-1 min-h-[220px] bg-slate-950/40 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center p-6 text-center text-left">
+                            <Server className="w-10 h-10 text-slate-700 mb-3 animate-pulse" />
+                            <h5 className="text-slate-300 text-xs font-bold uppercase tracking-wider">Server Belum Terhubung</h5>
+                            <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed max-w-sm">
+                              Masukkan parameter server Tvheadend di kolom kiri, lalu klik tombol hubungkan atau coba mode simulasi untuk melihat pratinjau saluran TV.
+                            </p>
+                          </div>
+                        )}
+
+                        {tvheadendStatus === 'connecting' && (
+                          <div className="flex-1 min-h-[220px] bg-slate-950/40 border border-slate-850 rounded-xl flex flex-col items-center justify-center p-6 text-center text-left">
+                            <Loader2 className="w-9 h-9 text-teal-400 animate-spin mb-3" />
+                            <h5 className="text-teal-400 text-xs font-bold uppercase tracking-wider">Menghubungkan ke {tvheadendHost}...</h5>
+                            <p className="text-[11px] text-slate-400 mt-1">Mengakses API Tvheadend & Mendownload Playlist M3U Saluran DVB-T2.</p>
+                          </div>
+                        )}
+
+                        {tvheadendStatus === 'connected' && (
+                          <div className="border border-slate-800 bg-slate-950/30 rounded-xl p-4 flex flex-col h-[350px]">
+                            <div className="flex justify-between items-center pb-2.5 border-b border-slate-900 mb-3 flex-shrink-0">
+                              <div className="flex items-center space-x-2">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider">
+                                  Terhubung: {tvheadendChannels.length} Saluran DVB-T2 Ditemukan
+                                </span>
+                              </div>
+                              {tvheadendChannels.length > 0 && (
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedTvheadendIndexes(tvheadendChannels.map((_, i) => i))}
+                                    className="text-[9px] font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                  >
+                                    Pilih Semua
+                                  </button>
+                                  <span className="text-slate-800 font-bold">|</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedTvheadendIndexes([])}
+                                    className="text-[9px] font-bold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                  >
+                                    Bersihkan
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Search Filter for Tvheadend */}
+                            <div className="relative mb-3 flex-shrink-0">
+                              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 pointer-events-none">
+                                <Search className="w-3.5 h-3.5" />
+                              </span>
+                              <input
+                                type="text"
+                                value={tvhSearch}
+                                onChange={(e) => setTvhSearch(e.target.value)}
+                                placeholder="Cari nama saluran dari Tvheadend..."
+                                className="w-full bg-slate-950 border border-slate-850 rounded-lg pl-8.5 pr-3 py-1.5 text-[11px] text-white focus:border-teal-500 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Channels list scrollable */}
+                            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 text-left select-none">
+                              {tvheadendChannels
+                                .map((ch, idx) => ({ ch, idx }))
+                                .filter(({ ch }) => ch.name.toLowerCase().includes(tvhSearch.toLowerCase()))
+                                .map(({ ch, idx }) => {
+                                  const isChecked = selectedTvheadendIndexes.includes(idx);
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onClick={() => {
+                                        if (isChecked) {
+                                          setSelectedTvheadendIndexes(selectedTvheadendIndexes.filter((i) => i !== idx));
+                                        } else {
+                                          setSelectedTvheadendIndexes([...selectedTvheadendIndexes, idx]);
+                                        }
+                                      }}
+                                      className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                                        isChecked
+                                          ? 'bg-teal-500/10 border-teal-500/30 text-white font-semibold'
+                                          : 'bg-slate-950 border-slate-900 text-slate-400 hover:bg-slate-900/60'
+                                      }`}
+                                    >
+                                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          readOnly
+                                          className="rounded border-slate-800 bg-slate-950 text-teal-600 focus:ring-0 focus:ring-offset-0 h-3.5 w-3.5 cursor-pointer flex-shrink-0"
+                                        />
+                                        <Tv className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                          <div className="font-semibold text-slate-200 truncate">{ch.name}</div>
+                                          <div className="text-[9px] text-slate-500 font-mono truncate">{ch.videoUrl}</div>
+                                        </div>
+                                      </div>
+                                      <span className="bg-slate-900 text-slate-500 text-[9px] px-1.5 py-0.5 rounded border border-slate-850 flex-shrink-0 ml-2">
+                                        {ch.category}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+
+                            {/* Import Button */}
+                            <div className="pt-3 border-t border-slate-850 mt-3 flex-shrink-0 flex justify-between items-center">
+                              <span className="text-[10px] text-slate-400">
+                                <strong className="text-teal-400 font-mono font-extrabold">{selectedTvheadendIndexes.length}</strong> dari {tvheadendChannels.length} dipilih
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (selectedTvheadendIndexes.length === 0) return;
+                                  const toImport = tvheadendChannels.filter((_, idx) => selectedTvheadendIndexes.includes(idx));
+                                  // Append to channelsList
+                                  const updated = [...channelsList];
+                                  toImport.forEach((importedChan) => {
+                                    // Avoid duplicates by videoUrl
+                                    if (!updated.some((c) => c.videoUrl === importedChan.videoUrl)) {
+                                      updated.push({
+                                        ...importedChan,
+                                        id: `tvh_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+                                      });
+                                    }
+                                  });
+                                  onChange({
+                                    ...state,
+                                    channels: updated,
+                                    activeTVChannelId: state.activeTVChannelId || updated[0]?.id
+                                  });
+                                  setShowTvheadend(false);
+                                  setTvheadendChannels([]);
+                                }}
+                                className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Import ke Playlist TV ({selectedTvheadendIndexes.length})</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
