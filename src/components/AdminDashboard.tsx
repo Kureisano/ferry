@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SignageState, LayoutConfig, TVChannel, CCTVCamera, Promotion, TickerConfig, LayoutMode, DisplayOrientation, DisplayItem, AdminUser } from '../types';
 import { PRESET_LAYOUTS, PRESET_CHANNELS, PRESET_CCTVS, PRESET_PROMOS, DEFAULT_TICKER } from '../initialData';
 import SignageDisplay from './SignageDisplay';
@@ -497,6 +497,14 @@ export default function AdminDashboard({
   const [selectedDvbIds, setSelectedDvbIds] = useState<string[]>([]);
   const [dvbSignalStrength, setDvbSignalStrength] = useState(92);
   const [dvbSignalQuality, setDvbSignalQuality] = useState(95);
+
+  const dvbLogsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isDvbScanning && dvbLogsEndRef.current) {
+      dvbLogsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [dvbScanLogs.length, isDvbScanning]);
 
   // Form states for CCTV Cameras CRUD
   const [showCCTVForm, setShowCCTVForm] = useState(false);
@@ -2999,11 +3007,7 @@ export default function AdminDashboard({
                                 </div>
                               );
                             })}
-                            <div ref={(el) => {
-                              if (el) {
-                                el.scrollIntoView({ behavior: 'smooth' });
-                              }
-                            }} />
+                            <div ref={dvbLogsEndRef} />
                           </div>
                         </div>
 
