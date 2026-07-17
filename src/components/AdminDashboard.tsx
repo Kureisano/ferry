@@ -3218,9 +3218,6 @@ export default function AdminDashboard({
                                             UHF
                                           </span>
                                         </div>
-                                        <div className="text-[10px] text-slate-500 mt-0.5 font-mono truncate max-w-[280px]">
-                                          {ch.overlayText}
-                                        </div>
                                       </div>
                                     </div>
                                     
@@ -3660,16 +3657,7 @@ export default function AdminDashboard({
                         </div>
                       )}
 
-                      <div>
-                        <label className="block text-[9px] font-mono text-slate-400 uppercase tracking-widest font-bold">Teks Berita Overlay (Opsional)</label>
-                        <textarea
-                          rows={2}
-                          value={tvForm.overlayText || ''}
-                          onChange={(e) => setTVForm({ ...tvForm, overlayText: e.target.value })}
-                          placeholder="Teks berjalan khusus di bagian bawah layar video..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white mt-1.5 leading-relaxed focus:border-indigo-500 focus:outline-none"
-                        />
-                      </div>
+                      {/* Removed Teks Berita Overlay (Opsional) */}
                     </div>
 
                     <div className="flex justify-end space-x-2 pt-2">

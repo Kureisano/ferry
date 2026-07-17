@@ -642,21 +642,6 @@ export default function SignageDisplay({
               {activeChannel?.name.toUpperCase()}
             </span>
           </div>
-          
-          {/* Overlay breaking text inside channel - sleek marquee news ticker */}
-          {activeChannel?.overlayText && (
-            <div className="absolute bottom-0 left-0 right-0 h-8 bg-red-950/95 backdrop-blur border-t border-red-500/30 flex items-center overflow-hidden pointer-events-none z-10">
-              <div className="bg-red-600 text-white text-[9px] px-3.5 py-1 font-mono font-black tracking-wider uppercase h-full flex items-center flex-shrink-0 z-20 shadow-lg select-none">
-                LIVE UPDATE
-              </div>
-              <div className="flex-1 overflow-hidden relative flex items-center h-full">
-                <div className="animate-ticker-roll whitespace-nowrap text-red-200 font-mono text-[10px] font-medium tracking-wide flex items-center">
-                  <span className="inline-block px-4">{activeChannel.overlayText}</span>
-                  <span className="inline-block px-4">{activeChannel.overlayText}</span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       );
     }
@@ -748,21 +733,6 @@ export default function SignageDisplay({
             {activeChannel?.name.toUpperCase()}
           </span>
         </div>
-        
-        {/* Overlay breaking text inside channel - sleek marquee news ticker */}
-        {activeChannel?.overlayText && (
-          <div className="absolute bottom-0 left-0 right-0 h-8 bg-red-950/95 backdrop-blur border-t border-red-500/30 flex items-center overflow-hidden pointer-events-none z-10">
-            <div className="bg-red-600 text-white text-[9px] px-3.5 py-1 font-mono font-black tracking-wider uppercase h-full flex items-center flex-shrink-0 z-20 shadow-lg select-none">
-              LIVE UPDATE
-            </div>
-            <div className="flex-1 overflow-hidden relative flex items-center h-full">
-              <div className="animate-ticker-roll whitespace-nowrap text-red-200 font-mono text-[10px] font-medium tracking-wide flex items-center">
-                <span className="inline-block px-4">{activeChannel.overlayText}</span>
-                <span className="inline-block px-4">{activeChannel.overlayText}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   };
