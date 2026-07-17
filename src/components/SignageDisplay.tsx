@@ -462,8 +462,6 @@ export default function SignageDisplay({
       // Standard video (mp4, webm, etc.) or forced standard player
       video.src = streamUrl;
       if (streamUrl) {
-        // Handle CORS and load stream
-        video.crossOrigin = "anonymous";
         video.load();
         video.play().catch(err => {
           console.warn("Unmuted standard autoplay blocked, trying muted:", err);

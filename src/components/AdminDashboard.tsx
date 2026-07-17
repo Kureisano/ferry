@@ -499,11 +499,11 @@ export default function AdminDashboard({
   const [dvbSignalStrength, setDvbSignalStrength] = useState(92);
   const [dvbSignalQuality, setDvbSignalQuality] = useState(95);
 
-  const dvbLogsEndRef = useRef<HTMLDivElement>(null);
+  const dvbLogsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isDvbScanning && dvbLogsEndRef.current) {
-      dvbLogsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (isDvbScanning && dvbLogsContainerRef.current) {
+      dvbLogsContainerRef.current.scrollTop = dvbLogsContainerRef.current.scrollHeight;
     }
   }, [dvbScanLogs.length, isDvbScanning]);
 
@@ -3136,7 +3136,10 @@ export default function AdminDashboard({
                           </div>
                           
                           {/* Log screen scrollable */}
-                          <div className="flex-1 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-1 pr-1 text-left select-text bg-slate-950/80 p-2 rounded border border-slate-900">
+                          <div 
+                            ref={dvbLogsContainerRef}
+                            className="flex-1 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-1 pr-1 text-left select-text bg-slate-950/80 p-2 rounded border border-slate-900"
+                          >
                             {dvbScanLogs.map((log, idx) => {
                               let logColor = 'text-slate-400';
                               if (log.startsWith('[FOUND]')) logColor = 'text-emerald-400 font-semibold';
@@ -3151,7 +3154,6 @@ export default function AdminDashboard({
                                 </div>
                               );
                             })}
-                            <div ref={dvbLogsEndRef} />
                           </div>
                         </div>
 

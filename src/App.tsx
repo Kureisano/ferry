@@ -28,7 +28,23 @@ function sanitizeForFirestore<T>(data: T): T {
 
 export default function App() {
   const [state, setState] = useState<SignageState>(INITIAL_SIGNAGE_STATE);
-  const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState(false);
+  const [firestoreQuotaExceeded, setFirestoreQuotaExceededState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('firestore_quota_exceeded') === 'true';
+    }
+    return false;
+  });
+
+  const setFirestoreQuotaExceeded = (val: boolean) => {
+    setFirestoreQuotaExceededState(val);
+    if (typeof window !== 'undefined') {
+      if (val) {
+        localStorage.setItem('firestore_quota_exceeded', 'true');
+      } else {
+        localStorage.removeItem('firestore_quota_exceeded');
+      }
+    }
+  };
   const [isStandaloneDisplay, setIsStandaloneDisplay] = useState(false);
   const [displayId, setDisplayId] = useState('global_state');
   const [isDisplayLoggedIn, setIsDisplayLoggedIn] = useState(false);
@@ -256,11 +272,33 @@ export default function App() {
   const activeSubscriptionId = isStandaloneDisplay ? displayId : selectedDisplayId;
 
   useEffect(() => {
-    const docRef = doc(db, 'signage_displays', activeSubscriptionId);
-    
     let isMounted = true;
+    
+    const isQuota = localStorage.getItem('firestore_quota_exceeded') === 'true' || firestoreQuotaExceeded;
+    if (isQuota) {
+      console.log(`[Offline Mode] Loading cached state for '${activeSubscriptionId}' from localStorage`);
+      const saved = localStorage.getItem(`signage_state_${activeSubscriptionId}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setState(prev => {
+            if (JSON.stringify(prev) === saved) return prev;
+            return parsed;
+          });
+        } catch (e) {
+          setState(INITIAL_SIGNAGE_STATE);
+        }
+      } else {
+        setState(INITIAL_SIGNAGE_STATE);
+      }
+      return; // Skip Firestore listener
+    }
+
+    const docRef = doc(db, 'signage_displays', activeSubscriptionId);
     const unsubscribe = onSnapshot(docRef, async (snapshot) => {
       if (!isMounted) return;
+      if (localStorage.getItem('firestore_quota_exceeded') === 'true' || firestoreQuotaExceeded) return;
+
       if (snapshot.exists()) {
         const cloudState = snapshot.data() as SignageState;
         setState(prev => {
@@ -364,7 +402,7 @@ export default function App() {
       isMounted = false;
       unsubscribe();
     };
-  }, [activeSubscriptionId]);
+  }, [activeSubscriptionId, firestoreQuotaExceeded]);
 
   // 3b. Real-Time cross-tab synchronization fallback via localStorage events
   useEffect(() => {
@@ -393,6 +431,11 @@ export default function App() {
     setState(newState);
     localStorage.setItem(`signage_state_${activeSubscriptionId}`, JSON.stringify(newState));
     
+    const isQuota = localStorage.getItem('firestore_quota_exceeded') === 'true' || firestoreQuotaExceeded;
+    if (isQuota) {
+      return; // Do not attempt remote Firestore write to avoid slow network attempts and console flooding
+    }
+
     try {
       const docRef = doc(db, 'signage_displays', activeSubscriptionId);
       await setDoc(docRef, sanitizeForFirestore(newState));
