@@ -284,9 +284,10 @@ export default function App() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          const mergedSaved = { ...INITIAL_SIGNAGE_STATE, ...parsed };
           setState(prev => {
-            if (JSON.stringify(prev) === saved) return prev;
-            return parsed;
+            if (JSON.stringify(prev) === JSON.stringify(mergedSaved)) return prev;
+            return mergedSaved;
           });
         } catch (e) {
           setState(INITIAL_SIGNAGE_STATE);
@@ -304,13 +305,17 @@ export default function App() {
 
       if (snapshot.exists()) {
         const cloudState = snapshot.data() as SignageState;
+        const mergedState: SignageState = {
+          ...INITIAL_SIGNAGE_STATE,
+          ...cloudState
+        };
         setState(prev => {
-          if (JSON.stringify(prev) === JSON.stringify(cloudState)) {
+          if (JSON.stringify(prev) === JSON.stringify(mergedState)) {
             return prev;
           }
-          return cloudState;
+          return mergedState;
         });
-        localStorage.setItem(`signage_state_${activeSubscriptionId}`, JSON.stringify(cloudState));
+        localStorage.setItem(`signage_state_${activeSubscriptionId}`, JSON.stringify(mergedState));
       } else {
         // Document doesn't exist yet, seed it safely with a getDoc fallback
         try {
@@ -319,13 +324,17 @@ export default function App() {
             const oldSnapshot = await getDoc(oldRef);
             if (oldSnapshot.exists()) {
               const oldData = oldSnapshot.data() as SignageState;
+              const mergedOldData: SignageState = {
+                ...INITIAL_SIGNAGE_STATE,
+                ...oldData
+              };
               if (isMounted) {
                 setState(prev => {
-                  if (JSON.stringify(prev) === JSON.stringify(oldData)) return prev;
-                  return oldData;
+                  if (JSON.stringify(prev) === JSON.stringify(mergedOldData)) return prev;
+                  return mergedOldData;
                 });
               }
-              await setDoc(docRef, sanitizeForFirestore(oldData));
+              await setDoc(docRef, sanitizeForFirestore(mergedOldData));
             } else {
               if (isMounted) {
                 setState(prev => {
@@ -354,9 +363,10 @@ export default function App() {
             if (saved) {
               try {
                 const parsed = JSON.parse(saved);
+                const mergedSaved = { ...INITIAL_SIGNAGE_STATE, ...parsed };
                 setState(prev => {
-                  if (JSON.stringify(prev) === saved) return prev;
-                  return parsed;
+                  if (JSON.stringify(prev) === JSON.stringify(mergedSaved)) return prev;
+                  return mergedSaved;
                 });
               } catch (e) {
                 setState(prev => {
@@ -383,9 +393,10 @@ export default function App() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          const mergedSaved = { ...INITIAL_SIGNAGE_STATE, ...parsed };
           setState(prev => {
-            if (JSON.stringify(prev) === saved) return prev;
-            return parsed;
+            if (JSON.stringify(prev) === JSON.stringify(mergedSaved)) return prev;
+            return mergedSaved;
           });
         } catch (e) {
           setState(prev => {
@@ -414,9 +425,10 @@ export default function App() {
         if (e.newValue) {
           try {
             const parsed = JSON.parse(e.newValue);
+            const mergedParsed = { ...INITIAL_SIGNAGE_STATE, ...parsed };
             setState(prev => {
-              if (JSON.stringify(prev) === e.newValue) return prev;
-              return parsed;
+              if (JSON.stringify(prev) === JSON.stringify(mergedParsed)) return prev;
+              return mergedParsed;
             });
           } catch (err) {
             console.warn("Failed to parse localStorage change event:", err);
