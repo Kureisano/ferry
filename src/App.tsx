@@ -26,8 +26,35 @@ function sanitizeForFirestore<T>(data: T): T {
   return cleaned;
 }
 
+function getInitialDisplayState(): SignageState {
+  if (typeof window !== 'undefined') {
+    let activeId = 'global_state';
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const queryDisplayId = params.get('displayId');
+      if (queryDisplayId) {
+        activeId = queryDisplayId;
+      } else {
+        activeId = localStorage.getItem('signage_admin_selected_display_id') || 'global_state';
+      }
+    } catch (e) {
+      activeId = localStorage.getItem('signage_admin_selected_display_id') || 'global_state';
+    }
+    const saved = localStorage.getItem(`signage_state_${activeId}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...INITIAL_SIGNAGE_STATE, ...parsed };
+      } catch (e) {
+        return INITIAL_SIGNAGE_STATE;
+      }
+    }
+  }
+  return INITIAL_SIGNAGE_STATE;
+}
+
 export default function App() {
-  const [state, setState] = useState<SignageState>(INITIAL_SIGNAGE_STATE);
+  const [state, setState] = useState<SignageState>(getInitialDisplayState);
   const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState(false);
 
   useEffect(() => {
@@ -305,6 +332,46 @@ export default function App() {
 
       if (snapshot.exists()) {
         const cloudState = snapshot.data() as SignageState;
+        
+        // Load the current localStorage state to compare timestamps
+        let localState: SignageState | null = null;
+        try {
+          const saved = localStorage.getItem(`signage_state_${activeSubscriptionId}`);
+          if (saved) {
+            localState = JSON.parse(saved);
+          }
+        } catch (e) {
+          console.warn("Error parsing local state for timestamp check:", e);
+        }
+
+        const cloudTime = cloudState.lastUpdated || 0;
+        const localTime = localState?.lastUpdated || 0;
+
+        // If local state has a higher lastUpdated timestamp than cloud state,
+        // it means there were unsaved/offline modifications in this browser session.
+        // We should retain the local state and push it to Firestore to sync rather than overwriting.
+        if (localTime > cloudTime) {
+          console.log(`[Sync] Local state for '${activeSubscriptionId}' is newer (${localTime}) than cloud state (${cloudTime}). Preserving local state and pushing update.`);
+          const mergedState: SignageState = {
+            ...INITIAL_SIGNAGE_STATE,
+            ...localState
+          };
+          setState(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(mergedState)) return prev;
+            return mergedState;
+          });
+          // Attempt to sync the newer local state back to Firestore
+          try {
+            await setDoc(docRef, sanitizeForFirestore(mergedState));
+            if (activeSubscriptionId === 'global_state') {
+              await setDoc(doc(db, 'signage', 'global_state'), sanitizeForFirestore(mergedState));
+            }
+          } catch (syncErr) {
+            console.warn("Could not sync local changes back to cloud during snapshot update:", syncErr);
+          }
+          return;
+        }
+
         const mergedState: SignageState = {
           ...INITIAL_SIGNAGE_STATE,
           ...cloudState
@@ -326,7 +393,8 @@ export default function App() {
               const oldData = oldSnapshot.data() as SignageState;
               const mergedOldData: SignageState = {
                 ...INITIAL_SIGNAGE_STATE,
-                ...oldData
+                ...oldData,
+                lastUpdated: Date.now()
               };
               if (isMounted) {
                 setState(prev => {
@@ -336,22 +404,30 @@ export default function App() {
               }
               await setDoc(docRef, sanitizeForFirestore(mergedOldData));
             } else {
+              const seedState = {
+                ...INITIAL_SIGNAGE_STATE,
+                lastUpdated: Date.now()
+              };
               if (isMounted) {
                 setState(prev => {
-                  if (JSON.stringify(prev) === JSON.stringify(INITIAL_SIGNAGE_STATE)) return prev;
-                  return INITIAL_SIGNAGE_STATE;
+                  if (JSON.stringify(prev) === JSON.stringify(seedState)) return prev;
+                  return seedState;
                 });
               }
-              await setDoc(docRef, sanitizeForFirestore(INITIAL_SIGNAGE_STATE));
+              await setDoc(docRef, sanitizeForFirestore(seedState));
             }
           } else {
+            const seedState = {
+              ...INITIAL_SIGNAGE_STATE,
+              lastUpdated: Date.now()
+            };
             if (isMounted) {
               setState(prev => {
-                if (JSON.stringify(prev) === JSON.stringify(INITIAL_SIGNAGE_STATE)) return prev;
-                return INITIAL_SIGNAGE_STATE;
+                if (JSON.stringify(prev) === JSON.stringify(seedState)) return prev;
+                return seedState;
               });
             }
-            await setDoc(docRef, sanitizeForFirestore(INITIAL_SIGNAGE_STATE));
+            await setDoc(docRef, sanitizeForFirestore(seedState));
           }
         } catch (err: any) {
           console.warn("Could not seed or fetch legacy display document, using initial/cached state:", err);
@@ -443,8 +519,12 @@ export default function App() {
 
   // 4. State update propagation (Writes to Firestore for instant display updates)
   const handleStateChange = async (newState: SignageState) => {
-    setState(newState);
-    localStorage.setItem(`signage_state_${activeSubscriptionId}`, JSON.stringify(newState));
+    const updatedStateWithTimestamp: SignageState = {
+      ...newState,
+      lastUpdated: Date.now()
+    };
+    setState(updatedStateWithTimestamp);
+    localStorage.setItem(`signage_state_${activeSubscriptionId}`, JSON.stringify(updatedStateWithTimestamp));
     
     const isQuota = firestoreQuotaExceeded;
     if (isQuota) {
@@ -453,11 +533,11 @@ export default function App() {
 
     try {
       const docRef = doc(db, 'signage_displays', activeSubscriptionId);
-      await setDoc(docRef, sanitizeForFirestore(newState));
+      await setDoc(docRef, sanitizeForFirestore(updatedStateWithTimestamp));
       
       // Mirror to old global_state if needed to prevent breaking legacy systems
       if (activeSubscriptionId === 'global_state') {
-        await setDoc(doc(db, 'signage', 'global_state'), sanitizeForFirestore(newState));
+        await setDoc(doc(db, 'signage', 'global_state'), sanitizeForFirestore(updatedStateWithTimestamp));
       }
     } catch (err: any) {
       console.error("Failed to sync updated state to Firestore:", err);
@@ -474,7 +554,11 @@ export default function App() {
     try {
       await setDoc(doc(db, 'signage', 'displays_list'), sanitizeForFirestore({ displays: updated }));
       // Initialize state for the new display
-      await setDoc(doc(db, 'signage_displays', newDisplay.id), sanitizeForFirestore(INITIAL_SIGNAGE_STATE));
+      const initialDisplayState = {
+        ...INITIAL_SIGNAGE_STATE,
+        lastUpdated: Date.now()
+      };
+      await setDoc(doc(db, 'signage_displays', newDisplay.id), sanitizeForFirestore(initialDisplayState));
     } catch (err: any) {
       console.error("Failed to add display in Firestore:", err);
       if (err?.code === 'resource-exhausted' || err?.message?.includes('Quota') || err?.message?.includes('quota')) {
@@ -564,7 +648,8 @@ export default function App() {
       try {
         await updateDoc(globalDocRef, sanitizeForFirestore({
           channels: channelsToSync,
-          activeTVChannelId: activeTVChannelIdToSync
+          activeTVChannelId: activeTVChannelIdToSync,
+          lastUpdated: Date.now()
         }));
       } catch (err: any) {
         console.warn(`Could not updateDoc for global_state, attempting setDoc:`, err);
@@ -575,7 +660,8 @@ export default function App() {
           await setDoc(globalDocRef, sanitizeForFirestore({
             ...INITIAL_SIGNAGE_STATE,
             channels: channelsToSync,
-            activeTVChannelId: activeTVChannelIdToSync
+            activeTVChannelId: activeTVChannelIdToSync,
+            lastUpdated: Date.now()
           }));
         } catch (setErr: any) {
           console.error("Failed to sync global_state:", setErr);
@@ -590,7 +676,8 @@ export default function App() {
         await setDoc(doc(db, 'signage', 'global_state'), sanitizeForFirestore({
           ...state,
           channels: channelsToSync,
-          activeTVChannelId: activeTVChannelIdToSync
+          activeTVChannelId: activeTVChannelIdToSync,
+          lastUpdated: Date.now()
         }));
       } catch (err: any) {
         console.warn("Legacy path write failed:", err);
@@ -606,7 +693,8 @@ export default function App() {
         try {
           await updateDoc(targetDocRef, sanitizeForFirestore({
             channels: channelsToSync,
-            activeTVChannelId: activeTVChannelIdToSync
+            activeTVChannelId: activeTVChannelIdToSync,
+            lastUpdated: Date.now()
           }));
         } catch (err: any) {
           console.warn(`Could not updateDoc for display ${display.id}, attempting setDoc:`, err);
@@ -617,7 +705,8 @@ export default function App() {
             await setDoc(targetDocRef, sanitizeForFirestore({
               ...INITIAL_SIGNAGE_STATE,
               channels: channelsToSync,
-              activeTVChannelId: activeTVChannelIdToSync
+              activeTVChannelId: activeTVChannelIdToSync,
+              lastUpdated: Date.now()
             }));
           } catch (setErr: any) {
             console.error(`Failed to sync display ${display.id}:`, setErr);

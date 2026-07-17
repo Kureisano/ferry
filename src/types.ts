@@ -111,4 +111,5 @@ export interface SignageState {
   weatherAreaId?: string; // Selected weather area ID
   weatherAreas?: WeatherArea[]; // List of available weather areas
   displayTheme?: 'slate_minimal' | 'cyber_neon' | 'warm_gold' | 'emerald_eco' | 'royal_navy'; // Display global dashboard theme
+  lastUpdated?: number; // Milliseconds timestamp of when the state was last modified
 }

@@ -1673,10 +1673,17 @@ export default function AdminDashboard({
                                 promotions: promotions.map((p) => p), // dummy refresh
                               });
                               // Simulating a system trigger via alert classes
-                              const targetCam = PRESET_CCTVS.find(c => c.id === firstCamActive);
+                              const targetCam = cctvsList.find(c => c.id === firstCamActive);
                               if (targetCam) {
-                                targetCam.hasMotion = !targetCam.hasMotion;
-                                onChange({ ...state });
+                                const updatedCCTVs = cctvsList.map((c) =>
+                                  c.id === firstCamActive
+                                    ? { ...c, hasMotion: !c.hasMotion }
+                                    : c
+                                );
+                                onChange({
+                                  ...state,
+                                  cctvs: updatedCCTVs
+                                });
                               }
                             }
                           }}
@@ -4054,11 +4061,17 @@ export default function AdminDashboard({
                     <div>
                       <label className="block text-[9px] font-mono text-slate-400 uppercase tracking-widest font-bold">Tema Warna Monitor</label>
                       <select
+                        value={cctvsList[0]?.colorTheme || 'monochrome'}
                         onChange={(e) => {
                           const theme = e.target.value as any;
-                          // update all cctvs to this color theme for demo simplicity
-                          PRESET_CCTVS.forEach((c) => { c.colorTheme = theme; });
-                          onChange({ ...state });
+                          const updatedCCTVs = cctvsList.map((c) => ({
+                            ...c,
+                            colorTheme: theme
+                          }));
+                          onChange({
+                            ...state,
+                            cctvs: updatedCCTVs
+                          });
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-200 mt-2 focus:border-indigo-500 focus:outline-none"
                       >
@@ -4072,10 +4085,17 @@ export default function AdminDashboard({
                     <div>
                       <label className="block text-[9px] font-mono text-slate-400 uppercase tracking-widest font-bold">Interferensi Analog Static Noise</label>
                       <select
+                        value={cctvsList[0]?.noiseLevel?.toString() || '5'}
                         onChange={(e) => {
                           const noise = parseInt(e.target.value, 10) || 5;
-                          PRESET_CCTVS.forEach((c) => { c.noiseLevel = noise; });
-                          onChange({ ...state });
+                          const updatedCCTVs = cctvsList.map((c) => ({
+                            ...c,
+                            noiseLevel: noise
+                          }));
+                          onChange({
+                            ...state,
+                            cctvs: updatedCCTVs
+                          });
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-200 mt-2 focus:border-indigo-500 focus:outline-none"
                       >
