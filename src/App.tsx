@@ -28,29 +28,32 @@ function sanitizeForFirestore<T>(data: T): T {
 
 export default function App() {
   const [state, setState] = useState<SignageState>(INITIAL_SIGNAGE_STATE);
-  const [firestoreQuotaExceeded, setFirestoreQuotaExceededState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('firestore_quota_exceeded') === 'true';
-    }
-    return false;
-  });
+  const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState(false);
 
-  const setFirestoreQuotaExceeded = (val: boolean) => {
-    setFirestoreQuotaExceededState(val);
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (val) {
-        localStorage.setItem('firestore_quota_exceeded', 'true');
-      } else {
-        localStorage.removeItem('firestore_quota_exceeded');
-      }
+      localStorage.removeItem('firestore_quota_exceeded');
     }
-  };
+  }, []);
+
   const [isStandaloneDisplay, setIsStandaloneDisplay] = useState(false);
   const [displayId, setDisplayId] = useState('global_state');
   const [isDisplayLoggedIn, setIsDisplayLoggedIn] = useState(false);
   
   // Admin selected display being configured
-  const [selectedDisplayId, setSelectedDisplayId] = useState('global_state');
+  const [selectedDisplayId, setSelectedDisplayIdState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('signage_admin_selected_display_id') || 'global_state';
+    }
+    return 'global_state';
+  });
+
+  const setSelectedDisplayId = (id: string) => {
+    setSelectedDisplayIdState(id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('signage_admin_selected_display_id', id);
+    }
+  };
   const [displaysList, setDisplaysList] = useState<DisplayItem[]>([]);
   const [displayStatuses, setDisplayStatuses] = useState<Record<string, any>>({});
   
@@ -274,7 +277,7 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     
-    const isQuota = localStorage.getItem('firestore_quota_exceeded') === 'true' || firestoreQuotaExceeded;
+    const isQuota = firestoreQuotaExceeded;
     if (isQuota) {
       console.log(`[Offline Mode] Loading cached state for '${activeSubscriptionId}' from localStorage`);
       const saved = localStorage.getItem(`signage_state_${activeSubscriptionId}`);
@@ -297,7 +300,7 @@ export default function App() {
     const docRef = doc(db, 'signage_displays', activeSubscriptionId);
     const unsubscribe = onSnapshot(docRef, async (snapshot) => {
       if (!isMounted) return;
-      if (localStorage.getItem('firestore_quota_exceeded') === 'true' || firestoreQuotaExceeded) return;
+      if (firestoreQuotaExceeded) return;
 
       if (snapshot.exists()) {
         const cloudState = snapshot.data() as SignageState;
@@ -431,7 +434,7 @@ export default function App() {
     setState(newState);
     localStorage.setItem(`signage_state_${activeSubscriptionId}`, JSON.stringify(newState));
     
-    const isQuota = localStorage.getItem('firestore_quota_exceeded') === 'true' || firestoreQuotaExceeded;
+    const isQuota = firestoreQuotaExceeded;
     if (isQuota) {
       return; // Do not attempt remote Firestore write to avoid slow network attempts and console flooding
     }
